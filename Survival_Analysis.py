@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from ydata_profiling import ProfileReport
-from lifelines import WeibullFitter, ExponentialFitter, LogNormalFitter, LogLogisticFitter, LogNormalAFTFitter
+from lifelines import WeibullAFTFitter, ExponentialFitter, LogLogisticAFTFitter, LogNormalAFTFitter
 import matplotlib.pyplot as plt
 from scipy.stats import lognorm
 
@@ -44,10 +44,10 @@ class AFTModelSelector:
         Stores the selected model in the 'aft_model' attribute.
         """
         models = {
-            'Weibull': WeibullFitter(),
+            'Weibull': WeibullAFTFitter(),
             'Exponential': ExponentialFitter(),
             'LogNormal': LogNormalAFTFitter(),
-            'LogLogistic': LogLogisticFitter(),
+            'LogLogistic': LogLogisticAFTFitter(),
         }
 
         aic_values = {}
@@ -57,22 +57,23 @@ class AFTModelSelector:
         self.data[self.duration_col] = self.data[self.duration_col].replace(0, 0.0001)
 
         for model_name, model in models.items():
-            if model_name == 'LogNormal':
-                model.fit(self.data, duration_col=self.duration_col, event_col=self.event_col)
+            if model_name == 'Exponential':
+                model.fit(self.data[self.duration_col], self.data[self.event_col])
                 models[model_name] = model
             else:
-                model.fit(durations=self.data[self.duration_col], event_observed=self.data[self.event_col])
+                model.fit(self.data, duration_col=self.duration_col, event_col=self.event_col)
                 models[model_name] = model
+
 
             aic = model.AIC_
             aic_values[model_name] = aic
 
             # Store survival functions
-            if model_name in ['Weibull', 'Exponential','LogLogistic']:
-                survival_functions[model_name] = model.survival_function_
-            elif model_name == 'LogNormal':
+            if model_name in ['Weibull', 'LogNormal','LogLogistic']:
+                survival_functions[model_name] = model.predict_survival_function(self.data)
+            elif model_name == 'Exponential':
                 # For LogNormal which has predict_survival_function
-                predictions = model.predict_survival_function(self.data)
+                predictions = model.survival_function_
                 survival_functions[model_name] = predictions
             else:
                 raise AttributeError(f"{model_name} has no attribute 'survival_function_' or 'predict_survival_function'.")
@@ -106,7 +107,7 @@ class AFTModelSelector:
             return
 
         # Handle zero values in the duration column
-        self.data[self.duration_col] = self.data[self.duration_col].replace(0, 0.0001)
+        # self.data[self.duration_col] = self.data[self.duration_col].replace(0, 0.0001)
 
         predictions_df_list = []
 
@@ -163,6 +164,8 @@ class AFTModelSelector:
         # Calculate CLV for each row
         data_clv['CLV'] = MM * data_clv.sum(axis=1)
         self.clv_prediction['CLV'] = data_clv['CLV']
+
+        
 
     def plot_survival_functions(self):
         """
